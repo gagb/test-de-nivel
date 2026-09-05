@@ -34,14 +34,9 @@ python3 -c "import flask" 2>/dev/null || {
   exit 1
 }
 if ! command -v cloudflared >/dev/null 2>&1; then
-  echo "cloudflared is not installed. Install it once (no sudo), then re-run:"
-  echo
-  echo "  curl -sSL -o /tmp/cloudflared.tgz \\"
-  echo "    https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64.tgz"
-  echo "  mkdir -p ~/.local/bin && tar -xzf /tmp/cloudflared.tgz -C ~/.local/bin"
-  echo "  chmod +x ~/.local/bin/cloudflared"
-  echo
-  echo "  See DEPLOY.md > 'Serve over a Cloudflare tunnel' for details."
+  echo "cloudflared is not installed. Install it once, then re-run this script."
+  echo "See DEPLOY.md > 'Serve over a Cloudflare tunnel' > 'One-time setup'"
+  echo "for the command for your system (Apple Silicon, Intel Mac, Linux)."
   exit 1
 fi
 

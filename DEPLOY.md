@@ -18,20 +18,57 @@ test.
 
 ## One-time setup
 
-Install `cloudflared` (this is an Intel Mac; no sudo needed). In Terminal:
+Install `cloudflared` once. Pick your system:
+
+**Mac with Apple Silicon (M1/M2/M3/M4)** — in Terminal, no sudo needed:
+
+```bash
+curl -sSL -o /tmp/cloudflared.tgz \
+  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-arm64.tgz
+mkdir -p ~/.local/bin && tar -xzf /tmp/cloudflared.tgz -C ~/.local/bin
+chmod +x ~/.local/bin/cloudflared
+~/.local/bin/cloudflared --version        # confirm it works
+```
+
+**Mac with Intel** — same, with `amd64` in the file name:
 
 ```bash
 curl -sSL -o /tmp/cloudflared.tgz \
   https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64.tgz
 mkdir -p ~/.local/bin && tar -xzf /tmp/cloudflared.tgz -C ~/.local/bin
 chmod +x ~/.local/bin/cloudflared
-~/.local/bin/cloudflared --version        # confirm it works
+~/.local/bin/cloudflared --version
 ```
+
+Not sure which Mac you have? Apple menu → *About This Mac*. "Chip: Apple …"
+is Apple Silicon; "Processor: Intel …" is Intel. If you use Homebrew, either
+Mac can instead run `brew install cloudflared`.
 
 `serve.sh` looks in `~/.local/bin` automatically, so you don't need to change
 your PATH.
 
-Install the Python dependency once:
+**Windows** — open PowerShell and run:
+
+```powershell
+winget install --id Cloudflare.cloudflared
+```
+
+Close and reopen PowerShell, then `cloudflared --version` to confirm. If
+`winget` isn't available, download `cloudflared-windows-amd64.exe` from
+<https://github.com/cloudflare/cloudflared/releases/latest>, rename it to
+`cloudflared.exe`, and put it in the project folder.
+
+**Linux (Debian/Ubuntu)**:
+
+```bash
+curl -sSL -o /tmp/cloudflared.deb \
+  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+sudo dpkg -i /tmp/cloudflared.deb
+cloudflared --version
+```
+
+Then install the Python dependency once (all systems). On Windows use `pip`
+and `python` instead of `pip3` and `python3`:
 
 ```bash
 pip3 install --user -r requirements.txt
@@ -39,7 +76,7 @@ pip3 install --user -r requirements.txt
 
 ## Each time you run the test
 
-From the project folder:
+**Mac or Linux** — from the project folder:
 
 ```bash
 ACCESS_CODE=hola2026 TEACHER_PASSWORD=yourpassword ./serve.sh
@@ -50,6 +87,26 @@ The script starts the server and prints a public URL like
 code** with students. The teacher console is that URL with `/teacher` added;
 log in with any username and the password you set. Press **Ctrl-C** to stop the
 server and close the tunnel.
+
+**Windows** — the start script is for Mac/Linux, so run the two parts by hand.
+Open PowerShell in the project folder and start the server:
+
+```powershell
+$env:ACCESS_CODE = "hola2026"
+$env:TEACHER_PASSWORD = "yourpassword"
+python app.py
+```
+
+Leave that window open. Open a **second** PowerShell window and start the
+tunnel:
+
+```powershell
+cloudflared tunnel --url http://127.0.0.1:5000
+```
+
+(If you put `cloudflared.exe` in the project folder instead of installing it,
+use `.\cloudflared.exe` in that command.) The public URL appears in this second
+window after a few seconds. To stop, press **Ctrl-C** in both windows.
 
 Notes:
 - The `trycloudflare.com` URL is new every run and stops working once you press
