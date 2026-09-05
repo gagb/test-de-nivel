@@ -1,46 +1,67 @@
 #!/usr/bin/env python3
-"""Placement-test web app.
+"""Placement-test web app (one question at a time, server-driven).
 
-- Serves the student test page (index.html), which carries no answer key.
-- Grades submissions server-side against test-data.json.
-- Stores every result in a local SQLite database (results.db).
-- Provides a password-protected teacher console with a CSV/Excel export.
+Flow
+----
+1. Gate: the student reads the instructions and enters name, class and the
+   shared ACCESS_CODE. The server creates (or resumes) an attempt.
+2. Questions are served one at a time. Each answer is saved and graded on the
+   server immediately, so a refresh or dropped connection loses nothing.
+3. After each block of 20 questions (one CEFR level) the server applies the
+   stop rule: more than MAX_ERRORS wrong in the block ends the test.
+4. Result screen shows level and points. Grades live in results.db.
 
-Run:
+The answer key never leaves the server.
+
+Run
+---
     pip install -r requirements.txt
-    python build.py          # (re)generate index.html from test-data.json
-    python app.py            # serves on http://127.0.0.1:5000
+    ACCESS_CODE=code TEACHER_PASSWORD=secret python app.py
 
-Teacher console: http://127.0.0.1:5000/teacher
-  user: (any)   password: value of TEACHER_PASSWORD env var (default "changeme")
+Teacher console: /teacher   (any username, password = TEACHER_PASSWORD)
 """
 import csv
 import io
 import json
 import os
+import secrets
 import sqlite3
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
 
 from flask import (
-    Flask, Response, g, jsonify, request, send_file, render_template_string,
+    Flask, Response, g, jsonify, redirect, request, send_file,
+    render_template_string, url_for,
 )
 
 ROOT = Path(__file__).parent
-DB_PATH = ROOT / "results.db"
+DB_PATH = Path(os.environ.get("DB_PATH", ROOT / "results.db"))
 TEACHER_PASSWORD = os.environ.get("TEACHER_PASSWORD", "changeme")
+ACCESS_CODE = os.environ.get("ACCESS_CODE", "clase")
 
-# ---- Load test definition once at startup -------------------------------
+# ---- Test definition ----------------------------------------------------
 DATA = json.loads((ROOT / "test-data.json").read_text(encoding="utf-8"))
 META = DATA["meta"]
-ANSWERS = {q["n"]: q["answer"] for q in DATA["questions"]}
-LEVELS = META["levels"]                       # ["A1", ... "C2"]
-LEVEL_RANGES = META["levelRanges"]            # {"A1": [1,20], ...}
-MAX_ERRORS = META["maxErrorsPerLevel"]        # 6 -> a level is passed with <= 6 errors
-TOTAL = META["totalQuestions"]
+QUESTIONS = {q["n"]: q for q in DATA["questions"]}
+LEVELS = META["levels"]                     # ["A1", ..., "C2"]
+LEVEL_RANGES = META["levelRanges"]          # {"A1": [1, 20], ...}
+PER_LEVEL = META["questionsPerLevel"]       # 20
+MAX_ERRORS = META["maxErrorsPerLevel"]      # 6 -> pass with <= 6 errors
+TOTAL = META["totalQuestions"]              # 120
 
 app = Flask(__name__)
+
+
+def now_iso():
+    return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+
+
+def level_of(n: int) -> str:
+    for lvl, (lo, hi) in LEVEL_RANGES.items():
+        if lo <= n <= hi:
+            return lvl
+    raise ValueError(n)
 
 
 # ---- Database -----------------------------------------------------------
@@ -48,6 +69,7 @@ def db():
     if "db" not in g:
         g.db = sqlite3.connect(DB_PATH)
         g.db.row_factory = sqlite3.Row
+        g.db.execute("PRAGMA foreign_keys = ON")
     return g.db
 
 
@@ -60,62 +82,113 @@ def close_db(_exc):
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
-    conn.execute(
+    conn.executescript(
         """
-        CREATE TABLE IF NOT EXISTS results (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            ts           TEXT NOT NULL,
-            name         TEXT NOT NULL,
-            klass        TEXT NOT NULL,
-            points       INTEGER NOT NULL,
-            level        TEXT NOT NULL,
-            per_level    TEXT NOT NULL,
-            answers      TEXT NOT NULL
-        )
+        CREATE TABLE IF NOT EXISTS attempts (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            token     TEXT NOT NULL UNIQUE,
+            name      TEXT NOT NULL,
+            klass     TEXT NOT NULL,
+            name_key  TEXT NOT NULL,
+            klass_key TEXT NOT NULL,
+            started   TEXT NOT NULL,
+            finished  TEXT,
+            status    TEXT NOT NULL DEFAULT 'in_progress',
+            points    INTEGER,
+            level     TEXT
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS attempts_person
+            ON attempts (name_key, klass_key);
+        CREATE TABLE IF NOT EXISTS answers (
+            attempt_id INTEGER NOT NULL REFERENCES attempts(id) ON DELETE CASCADE,
+            n          INTEGER NOT NULL,
+            choice     TEXT,
+            correct    INTEGER NOT NULL,
+            ts         TEXT NOT NULL,
+            PRIMARY KEY (attempt_id, n)
+        );
         """
     )
     conn.commit()
     conn.close()
 
 
-# Ensure the table exists as soon as the module is imported, so the app works
-# both under `python app.py` and under a WSGI server (PythonAnywhere, gunicorn).
-init_db()
+init_db()  # works under `python app.py` and under WSGI import alike
 
 
-# ---- Grading ------------------------------------------------------------
-def grade(answers: dict) -> dict:
-    """answers maps question-number (as str or int) -> chosen option letter.
+# ---- Grading helpers ----------------------------------------------------
+def public_question(n: int) -> dict:
+    """Question as sent to the browser: no level, no answer."""
+    q = QUESTIONS[n]
+    return {"n": n, "prompt": q["prompt"], "options": q["options"]}
 
-    A blank / missing answer counts as wrong.
-    Points = total correct out of 120.
-    Level  = highest CEFR level passed without a break, scanning A1 -> C2.
-             A level is passed when it has MAX_ERRORS or fewer wrong answers.
+
+def per_level_stats(attempt_id: int) -> dict:
+    """{'A1': {'answered': 20, 'correct': 15, 'errors': 5}, ...} for each level.
+
+    'errors' counts unanswered questions in a *started* block as wrong. Blocks
+    never reached have answered == 0.
     """
-    def chosen(n):
-        return answers.get(str(n), answers.get(n))
+    rows = db().execute(
+        "SELECT n, correct FROM answers WHERE attempt_id = ?", (attempt_id,)
+    ).fetchall()
+    stats = {lvl: {"answered": 0, "correct": 0, "errors": 0} for lvl in LEVELS}
+    for r in rows:
+        s = stats[level_of(r["n"])]
+        s["answered"] += 1
+        s["correct"] += r["correct"]
+    for s in stats.values():
+        s["errors"] = PER_LEVEL - s["correct"] if s["answered"] else 0
+    return stats
 
-    points = 0
-    per_level = {}
-    passed = []
-    broken = False
 
+def compute_level(stats: dict) -> str:
+    """Highest level passed scanning A1 -> C2; stops at the first failure.
+    A block must be fully answered to count as passed."""
+    passed = None
     for lvl in LEVELS:
-        lo, hi = LEVEL_RANGES[lvl]
-        correct = 0
-        for n in range(lo, hi + 1):
-            if chosen(n) == ANSWERS[n]:
-                correct += 1
-        errors = (hi - lo + 1) - correct
-        points += correct
-        per_level[lvl] = {"correct": correct, "errors": errors}
-        if not broken and errors <= MAX_ERRORS:
-            passed.append(lvl)
+        s = stats[lvl]
+        if s["answered"] == PER_LEVEL and s["errors"] <= MAX_ERRORS:
+            passed = lvl
         else:
-            broken = True  # once a level is failed, later passes don't count
+            break
+    return passed or "-"
 
-    level = passed[-1] if passed else "-"  # "-" = below A1
-    return {"points": points, "level": level, "perLevel": per_level}
+
+def finish_attempt(attempt_id: int) -> dict:
+    stats = per_level_stats(attempt_id)
+    points = sum(s["correct"] for s in stats.values())
+    level = compute_level(stats)
+    db().execute(
+        "UPDATE attempts SET status='finished', finished=?, points=?, level=?"
+        " WHERE id=?",
+        (now_iso(), points, level, attempt_id),
+    )
+    db().commit()
+    return {"done": True, "level": level, "points": points, "total": TOTAL}
+
+
+def next_payload(attempt) -> dict:
+    """What the client needs next: either the next question or the result."""
+    if attempt["status"] == "finished":
+        return {"done": True, "level": attempt["level"],
+                "points": attempt["points"], "total": TOTAL}
+    answered = db().execute(
+        "SELECT COUNT(*) FROM answers WHERE attempt_id = ?", (attempt["id"],)
+    ).fetchone()[0]
+    n = answered + 1
+    if n > TOTAL:  # defensive: everything answered but not finalised
+        return finish_attempt(attempt["id"])
+    return {"done": False, "question": public_question(n),
+            "answered": answered, "total": TOTAL}
+
+
+def get_attempt_by_token(token: str):
+    if not token:
+        return None
+    return db().execute(
+        "SELECT * FROM attempts WHERE token = ?", (token,)
+    ).fetchone()
 
 
 # ---- Student routes -----------------------------------------------------
@@ -124,31 +197,101 @@ def index():
     return send_file(ROOT / "index.html")
 
 
-@app.route("/submit", methods=["POST"])
-def submit():
-    payload = request.get_json(force=True, silent=True) or {}
-    name = (payload.get("name") or "").strip()
-    klass = (payload.get("klass") or "").strip()
-    answers = payload.get("answers") or {}
-    if not name or not klass:
-        return jsonify({"error": "Falta el nombre o la clase."}), 400
+@app.route("/api/notes")
+def notes():
+    return jsonify({"title": META["title"], "source": META["source"],
+                    "notes": META["notes"], "total": TOTAL})
 
-    result = grade(answers)
-    ts = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+
+@app.route("/api/start", methods=["POST"])
+def start():
+    p = request.get_json(force=True, silent=True) or {}
+    name = (p.get("name") or "").strip()
+    klass = (p.get("klass") or "").strip()
+    code = (p.get("code") or "").strip()
+    if not name or not klass:
+        return jsonify({"error": "Escribe tu nombre y tu clase."}), 400
+    if code != ACCESS_CODE:
+        return jsonify({"error": "Código de acceso incorrecto."}), 403
+
+    name_key, klass_key = name.casefold(), klass.casefold()
+    existing = db().execute(
+        "SELECT * FROM attempts WHERE name_key=? AND klass_key=?",
+        (name_key, klass_key),
+    ).fetchone()
+    if existing:
+        if existing["status"] == "finished":
+            return jsonify({"error": "Ya has completado este test. "
+                            "Habla con tu profe si necesitas repetirlo."}), 409
+        attempt = existing  # resume
+    else:
+        token = secrets.token_urlsafe(24)
+        db().execute(
+            "INSERT INTO attempts (token, name, klass, name_key, klass_key, started)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (token, name, klass, name_key, klass_key, now_iso()),
+        )
+        db().commit()
+        attempt = get_attempt_by_token(token)
+
+    out = next_payload(attempt)
+    out["token"] = attempt["token"]
+    out["name"] = attempt["name"]
+    return jsonify(out)
+
+
+@app.route("/api/next")
+def api_next():
+    attempt = get_attempt_by_token(request.args.get("token", ""))
+    if not attempt:
+        return jsonify({"error": "invalid token"}), 401
+    out = next_payload(attempt)
+    out["name"] = attempt["name"]
+    return jsonify(out)
+
+
+@app.route("/api/answer", methods=["POST"])
+def api_answer():
+    p = request.get_json(force=True, silent=True) or {}
+    attempt = get_attempt_by_token(p.get("token", ""))
+    if not attempt:
+        return jsonify({"error": "invalid token"}), 401
+    if attempt["status"] == "finished":
+        return jsonify(next_payload(attempt))
+
+    n = p.get("n")
+    choice = p.get("choice")  # option letter, or None for "no lo sé"
+    answered = db().execute(
+        "SELECT COUNT(*) FROM answers WHERE attempt_id = ?", (attempt["id"],)
+    ).fetchone()[0]
+    expected = answered + 1
+    if n != expected:
+        # Out of sync (double-tap, stale tab): tell the client where we are.
+        out = next_payload(attempt)
+        out["resync"] = True
+        return jsonify(out), 409
+    q = QUESTIONS[n]
+    if choice is not None and choice not in q["options"]:
+        return jsonify({"error": "invalid choice"}), 400
+
+    correct = 1 if choice == q["answer"] else 0
     db().execute(
-        "INSERT INTO results (ts, name, klass, points, level, per_level, answers)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (
-            ts, name, klass, result["points"], result["level"],
-            json.dumps(result["perLevel"], ensure_ascii=False),
-            json.dumps(answers, ensure_ascii=False),
-        ),
+        "INSERT INTO answers (attempt_id, n, choice, correct, ts) VALUES (?, ?, ?, ?, ?)",
+        (attempt["id"], n, choice, correct, now_iso()),
     )
     db().commit()
-    return jsonify({"level": result["level"], "points": result["points"]})
+
+    # Stop rule at the end of each level block, and at the end of the test.
+    if n % PER_LEVEL == 0:
+        stats = per_level_stats(attempt["id"])
+        if stats[level_of(n)]["errors"] > MAX_ERRORS or n == TOTAL:
+            return jsonify(finish_attempt(attempt["id"]))
+
+    attempt = get_attempt_by_token(attempt["token"])
+    return jsonify(next_payload(attempt))
 
 
-# ---- Teacher console (password protected) -------------------------------
+# ---- Teacher console ----------------------------------------------------
 def require_teacher(f):
     @wraps(f)
     def wrapper(*a, **kw):
@@ -169,95 +312,115 @@ TEACHER_HTML = """
 <style>
  body{font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
       margin:0;background:#f8fafc;color:#1f2937}
- header{background:#1f2937;color:#fff;padding:16px 20px;display:flex;
+ header{background:#1f2937;color:#fff;padding:14px 20px;display:flex;
         justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
  header h1{margin:0;font-size:18px}
+ header .meta{color:#cbd5e1;font-size:13px}
  a.btn{background:#dc2626;color:#fff;text-decoration:none;padding:8px 14px;
        border-radius:8px;font-weight:700}
- main{max-width:1000px;margin:0 auto;padding:16px}
+ main{max-width:1100px;margin:0 auto;padding:16px;overflow-x:auto}
  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e5e7eb;
        border-radius:8px;overflow:hidden}
- th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;font-size:14px}
+ th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;font-size:14px;
+       white-space:nowrap}
  th{background:#f1f5f9}
  tr:last-child td{border-bottom:0}
  .lvl{font-weight:700;color:#dc2626}
  .muted{color:#6b7280}
+ .prog{color:#b45309;font-weight:600}
+ button.del{background:#fff;color:#6b7280;border:1px solid #e5e7eb;border-radius:6px;
+            padding:4px 8px;cursor:pointer;font-size:12px}
+ button.del:hover{color:#dc2626;border-color:#dc2626}
 </style></head><body>
 <header>
-  <h1>Consola del profesor — {{ count }} resultados</h1>
-  <a class="btn" href="/export.csv">Descargar CSV (Excel)</a>
+  <div>
+    <h1>Consola del profesor — {{ rows|length }} intentos</h1>
+    <div class="meta">Código de acceso para estudiantes: <b>{{ access_code }}</b></div>
+  </div>
+  <a class="btn" href="{{ url_for('export_csv') }}">Descargar CSV (Excel)</a>
 </header>
 <main>
  {% if rows %}
  <table>
-  <tr><th>#</th><th>Fecha</th><th>Nombre</th><th>Clase</th>
-      <th>Puntos</th><th>Nivel</th><th>Por nivel</th></tr>
+  <tr><th>#</th><th>Inicio</th><th>Nombre</th><th>Clase</th><th>Estado</th>
+      <th>Puntos</th><th>Nivel</th>
+      {% for lvl in levels %}<th>{{ lvl }}</th>{% endfor %}<th></th></tr>
   {% for r in rows %}
   <tr>
-   <td class="muted">{{ r["id"] }}</td>
-   <td class="muted">{{ r["ts"] }}</td>
-   <td>{{ r["name"] }}</td>
-   <td>{{ r["klass"] }}</td>
-   <td>{{ r["points"] }} / {{ total }}</td>
-   <td class="lvl">{{ r["level"] }}</td>
-   <td class="muted">{{ r["per_level_summary"] }}</td>
+   <td class="muted">{{ r.id }}</td>
+   <td class="muted">{{ r.started[:16].replace('T',' ') }}</td>
+   <td>{{ r.name }}</td>
+   <td>{{ r.klass }}</td>
+   <td>{% if r.status == 'finished' %}Terminado{% else %}
+       <span class="prog">En curso ({{ r.answered }}/{{ total }})</span>{% endif %}</td>
+   <td>{% if r.points is not none %}{{ r.points }} / {{ total }}{% else %}—{% endif %}</td>
+   <td class="lvl">{{ r.level or '—' }}</td>
+   {% for lvl in levels %}
+   <td class="muted">{% if r.stats[lvl].answered %}{{ r.stats[lvl].correct }}/{{ per_level }}{% else %}·{% endif %}</td>
+   {% endfor %}
+   <td><form method="post" action="{{ url_for('delete_attempt', attempt_id=r.id) }}"
+             onsubmit="return confirm('¿Borrar el intento de {{ r.name }}? Podrá repetir el test.')">
+       <button class="del" type="submit">Borrar</button></form></td>
   </tr>
   {% endfor %}
  </table>
  {% else %}
- <p class="muted">Todavía no hay resultados.</p>
+ <p class="muted">Todavía no hay intentos.</p>
  {% endif %}
 </main></body></html>
 """
 
 
-def per_level_summary(per_level_json: str) -> str:
-    d = json.loads(per_level_json)
-    return "  ".join(f"{lvl}:{d[lvl]['correct']}/20" for lvl in LEVELS if lvl in d)
+def all_attempts_with_stats():
+    rows = []
+    for r in db().execute("SELECT * FROM attempts ORDER BY id DESC").fetchall():
+        d = dict(r)
+        d["stats"] = per_level_stats(r["id"])
+        d["answered"] = sum(s["answered"] for s in d["stats"].values())
+        rows.append(d)
+    return rows
 
 
 @app.route("/teacher")
 @require_teacher
 def teacher():
-    cur = db().execute("SELECT * FROM results ORDER BY id DESC")
-    rows = []
-    for r in cur.fetchall():
-        row = dict(r)
-        row["per_level_summary"] = per_level_summary(row["per_level"])
-        rows.append(row)
     return render_template_string(
-        TEACHER_HTML, rows=rows, count=len(rows), total=TOTAL
+        TEACHER_HTML, rows=all_attempts_with_stats(), levels=LEVELS,
+        total=TOTAL, per_level=PER_LEVEL, access_code=ACCESS_CODE,
     )
+
+
+@app.route("/teacher/delete/<int:attempt_id>", methods=["POST"])
+@require_teacher
+def delete_attempt(attempt_id):
+    db().execute("DELETE FROM attempts WHERE id = ?", (attempt_id,))
+    db().commit()
+    return redirect(url_for("teacher"))
 
 
 @app.route("/export.csv")
 @require_teacher
 def export_csv():
-    cur = db().execute("SELECT * FROM results ORDER BY id ASC")
     buf = io.StringIO()
     buf.write("﻿")  # BOM so Excel reads accents correctly
-    writer = csv.writer(buf)
-    header = ["id", "fecha", "nombre", "clase", "puntos", "nivel"]
-    header += [f"aciertos_{lvl}" for lvl in LEVELS]
-    writer.writerow(header)
-    for r in cur.fetchall():
-        d = json.loads(r["per_level"])
-        writer.writerow(
-            [r["id"], r["ts"], r["name"], r["klass"], r["points"], r["level"]]
-            + [d.get(lvl, {}).get("correct", "") for lvl in LEVELS]
+    w = csv.writer(buf)
+    w.writerow(["id", "inicio", "fin", "nombre", "clase", "estado", "puntos", "nivel"]
+               + [f"aciertos_{lvl}" for lvl in LEVELS])
+    for r in sorted(all_attempts_with_stats(), key=lambda x: x["id"]):
+        w.writerow(
+            [r["id"], r["started"], r["finished"] or "", r["name"], r["klass"],
+             "terminado" if r["status"] == "finished" else "en curso",
+             r["points"] if r["points"] is not None else "", r["level"] or ""]
+            + [r["stats"][lvl]["correct"] if r["stats"][lvl]["answered"] else ""
+               for lvl in LEVELS]
         )
     fname = f"resultados_{datetime.now().strftime('%Y%m%d')}.csv"
-    return Response(
-        buf.getvalue(),
-        mimetype="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
-    )
+    return Response(buf.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
 if __name__ == "__main__":
-    # Debugger is OFF by default: this server gets exposed through a public
-    # tunnel, and Flask's debugger would let anyone run code on an error page.
-    # Enable it only for local development with FLASK_DEBUG=1.
+    # Debugger OFF by default: this server is exposed through a public tunnel.
     debug = os.environ.get("FLASK_DEBUG") == "1"
     port = int(os.environ.get("PORT", "5000"))
     app.run(host="127.0.0.1", port=port, debug=debug)

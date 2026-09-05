@@ -16,8 +16,9 @@ project_home = f"/home/{USERNAME}/fernando"
 if project_home not in sys.path:
     sys.path.insert(0, project_home)
 
-# ---- 2. Set the teacher console password ----------------------------------
+# ---- 2. Set the teacher console password and the student access code -------
 os.environ["TEACHER_PASSWORD"] = "change-this-password"  # <-- pick a password
+os.environ["ACCESS_CODE"] = "change-this-code"           # <-- code students type
 
 # ---- 3. Expose the Flask app to the WSGI server ---------------------------
 from app import app as application  # noqa: E402

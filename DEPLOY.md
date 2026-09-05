@@ -42,14 +42,14 @@ pip3 install --user -r requirements.txt
 From the project folder:
 
 ```bash
-TEACHER_PASSWORD=yourpassword ./serve.sh
+ACCESS_CODE=hola2026 TEACHER_PASSWORD=yourpassword ./serve.sh
 ```
 
-The script builds the page, starts the server, and prints a public URL like
-`https://something-random.trycloudflare.com`. Share that URL with students.
-The teacher console is that URL with `/teacher` added; log in with any username
-and the password you set. Press **Ctrl-C** to stop the server and close the
-tunnel.
+The script starts the server and prints a public URL like
+`https://something-random.trycloudflare.com`. Share that URL **and the access
+code** with students. The teacher console is that URL with `/teacher` added;
+log in with any username and the password you set. Press **Ctrl-C** to stop the
+server and close the tunnel.
 
 Notes:
 - The `trycloudflare.com` URL is new every run and stops working once you press
@@ -117,6 +117,7 @@ from this project. Then edit two things in it:
 
 - Set `USERNAME` to your PythonAnywhere username.
 - Set the teacher password on the `TEACHER_PASSWORD` line.
+- Set the student access code on the `ACCESS_CODE` line.
 
 Save the file.
 
@@ -135,7 +136,7 @@ Click the green **Reload** button on the Web tab. Then:
   PythonAnywhere's persistent disk, so grades survive reloads and restarts.
 - Free accounts must click **Reload** on the Web tab once every three months
   to keep the app running; PythonAnywhere emails a reminder.
-- If you change questions in `test-data.json`, run `python3 build.py` in the
-  Bash console to regenerate `index.html`, then click **Reload**.
+- If you change questions in `test-data.json`, click **Reload** on the Web
+  tab; the server reads the file at startup.
 - Back up grades any time by downloading the CSV, or the `results.db` file
   from the Files tab.

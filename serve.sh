@@ -17,13 +17,16 @@ export PATH="$HOME/.local/bin:$PATH"
 
 PORT="${PORT:-5000}"
 : "${TEACHER_PASSWORD:=changeme}"
-export TEACHER_PASSWORD PORT
+: "${ACCESS_CODE:=clase}"
+export TEACHER_PASSWORD ACCESS_CODE PORT
 
 if [ "$TEACHER_PASSWORD" = "changeme" ]; then
   echo "WARNING: using default teacher password 'changeme'."
-  echo "         Restart with:  TEACHER_PASSWORD=yourpassword ./serve.sh"
+  echo "         Restart with:  TEACHER_PASSWORD=yourpassword ACCESS_CODE=yourcode ./serve.sh"
   echo
 fi
+echo "Student access code: ${ACCESS_CODE}"
+echo
 
 # --- checks ---------------------------------------------------------------
 python3 -c "import flask" 2>/dev/null || {
@@ -51,9 +54,6 @@ if lsof -nP -iTCP:"${PORT}" -sTCP:LISTEN >/dev/null 2>&1; then
   echo "Stop that process (kill <PID>) or run with a different port: PORT=5001 ./serve.sh"
   exit 1
 fi
-
-# --- build the student page ----------------------------------------------
-python3 build.py
 
 # --- start the app, tunnel, and clean up on exit --------------------------
 echo "Starting the test server on http://127.0.0.1:${PORT} ..."

@@ -3,185 +3,243 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Examen progresivo - Test de nivel (v.1.3)</title>
+<title>Test de nivel</title>
 <style>
   :root {
     --ink: #1f2937; --muted: #6b7280; --line: #e5e7eb; --bg: #f8fafc;
-    --card: #ffffff; --brand: #dc2626; --brand-ink: #ffffff; --ok: #16a34a;
-    --pick: #eff6ff; --pick-line: #3b82f6;
+    --card: #ffffff; --brand: #dc2626; --pick: #eff6ff; --pick-line: #3b82f6;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--ink);
-    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font: 17px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
-  header {
-    background: var(--ink); color: #fff; padding: 20px 16px; text-align: center;
-  }
-  header h1 { margin: 0; font-size: 22px; }
-  header p { margin: 6px 0 0; color: #cbd5e1; font-size: 14px; }
-  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  header { background: var(--ink); color: #fff; padding: 18px 16px; text-align: center; }
+  header h1 { margin: 0; font-size: 20px; }
+  header p { margin: 4px 0 0; color: #cbd5e1; font-size: 13px; }
+  main { max-width: 640px; margin: 0 auto; padding: 16px; }
   .card {
-    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-    padding: 16px; margin: 14px 0;
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px; margin: 14px 0;
   }
-  .notes ul { margin: 8px 0 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
-  label.field { display: block; margin: 10px 0; font-weight: 600; }
+  .hidden { display: none !important; }
+  h2 { margin: 0 0 8px; font-size: 18px; }
+  ul.notes { margin: 8px 0 0; padding-left: 20px; color: var(--muted); font-size: 15px; }
+  label.field { display: block; margin: 12px 0; font-weight: 600; }
   label.field input {
-    display: block; width: 100%; margin-top: 6px; padding: 10px;
-    border: 1px solid var(--line); border-radius: 8px; font-size: 16px; font-weight: 400;
+    display: block; width: 100%; margin-top: 6px; padding: 12px;
+    border: 1px solid var(--line); border-radius: 10px; font-size: 17px; font-weight: 400;
   }
-  .q { scroll-margin-top: 12px; }
-  .q .num {
-    display: inline-block; min-width: 30px; height: 30px; line-height: 30px;
-    text-align: center; background: var(--ink); color: #fff; border-radius: 8px;
-    font-weight: 700; margin-right: 8px;
+  button {
+    background: var(--brand); color: #fff; border: 0; border-radius: 12px;
+    padding: 14px 20px; font-size: 17px; font-weight: 700; cursor: pointer; width: 100%;
   }
-  .q .prompt { font-weight: 600; white-space: pre-line; }
-  .q .level-tag {
-    float: right; font-size: 12px; color: var(--muted); border: 1px solid var(--line);
-    border-radius: 999px; padding: 2px 8px;
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.ghost {
+    background: #fff; color: var(--muted); border: 1px solid var(--line); font-weight: 600;
+    margin-top: 10px;
   }
-  .opts { margin-top: 12px; display: grid; gap: 8px; }
+  .err { color: var(--brand); font-weight: 600; margin: 10px 0 0; min-height: 1.4em; }
+
+  .progress { display: flex; align-items: center; gap: 12px; margin: 4px 0 12px; }
+  .progress .bar { flex: 1; height: 8px; background: var(--line); border-radius: 999px; overflow: hidden; }
+  .progress .bar > div { height: 100%; background: var(--pick-line); width: 0; transition: width .25s; }
+  .progress .txt { color: var(--muted); font-size: 14px; white-space: nowrap; }
+
+  .qnum {
+    display: inline-block; min-width: 34px; height: 34px; line-height: 34px; text-align: center;
+    background: var(--ink); color: #fff; border-radius: 10px; font-weight: 700; margin-right: 10px;
+  }
+  .prompt { font-weight: 600; white-space: pre-line; font-size: 19px; margin: 12px 0 16px; }
+  .opts { display: grid; gap: 10px; }
   .opt {
-    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
-    border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: #fff;
+    display: flex; align-items: center; gap: 12px; padding: 14px; border: 2px solid var(--line);
+    border-radius: 12px; cursor: pointer; background: #fff; font-size: 17px; text-align: left;
+    color: var(--ink); font-weight: 500; width: 100%;
   }
   .opt:hover { border-color: var(--pick-line); }
-  .opt input { accent-color: var(--pick-line); width: 18px; height: 18px; }
   .opt.chosen { background: var(--pick); border-color: var(--pick-line); }
   .opt .key {
-    font-weight: 700; background: var(--ink); color: #fff; border-radius: 6px;
-    width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center;
-    font-size: 13px;
+    flex: 0 0 auto; width: 28px; height: 28px; border-radius: 8px; background: var(--ink); color: #fff;
+    display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;
   }
-  .bar {
-    position: sticky; bottom: 0; background: var(--card); border-top: 1px solid var(--line);
-    padding: 12px 16px; display: flex; align-items: center; gap: 12px; justify-content: space-between;
-  }
-  .bar .count { color: var(--muted); font-size: 14px; }
-  button {
-    background: var(--brand); color: var(--brand-ink); border: 0; border-radius: 10px;
-    padding: 12px 20px; font-size: 16px; font-weight: 700; cursor: pointer;
-  }
-  button:disabled { opacity: .5; cursor: not-allowed; }
-  .result { text-align: center; padding: 32px 16px; }
-  .result .level { font-size: 48px; font-weight: 800; color: var(--brand); margin: 8px 0; }
-  .hidden { display: none; }
+  .opt.chosen .key { background: var(--pick-line); }
+  .actions { margin-top: 16px; }
+
+  .result { text-align: center; padding: 28px 16px; }
+  .result .level { font-size: 56px; font-weight: 800; color: var(--brand); margin: 6px 0; }
+  .result .pts { color: var(--muted); }
   footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px 16px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>Examen progresivo - Test de nivel (v.1.3)</h1>
-  <p>ProfeDeELE.es</p>
+  <h1 id="title">Test de nivel</h1>
+  <p id="source"></p>
 </header>
 
-<main id="app">
-  <section class="card notes">
-    <strong>Notas</strong>
-    <ul><li>Este test tiene 120 preguntas en total.</li><li>Solo hay una respuesta correcta para cada pregunta.</li><li>El test recoge solo cuestiones de gramatica y vocabulario. Para saber tu nivel de espanol oral, debes completar una entrevista con tu profe.</li><li>Es un test de dificultad progresiva. En algun momento te daras cuenta de que no puedes avanzar: eso significa que has llegado al maximo de tu nivel. No marques opciones al azar!</li><li>El examen se puede completar en 60 minutos. Necesitaras alrededor de 30 segundos para cada pregunta.</li><li>Este test es progresivo y hay 20 preguntas por nivel. Para superar un nivel, no debe tener mas de 6 fallos de entre las 20 preguntas.</li></ul>
-  </section>
-
-  <section class="card">
+<main>
+  <!-- 1. Gate: instructions + identity + access code -->
+  <section id="gate" class="card">
+    <h2>Antes de empezar</h2>
+    <ul class="notes" id="notes"></ul>
     <label class="field">Nombre y apellido(s)
-      <input id="name" type="text" autocomplete="name" required>
+      <input id="name" type="text" autocomplete="name" autocapitalize="words">
     </label>
     <label class="field">Clase
-      <input id="klass" type="text" required>
+      <input id="klass" type="text" autocomplete="off">
     </label>
+    <label class="field">Código de acceso
+      <input id="code" type="text" autocomplete="off" autocapitalize="none">
+    </label>
+    <button id="startBtn" type="button">Empezar el test</button>
+    <p class="err" id="gateErr"></p>
   </section>
 
-  <div id="questions"></div>
+  <!-- 2. One question at a time -->
+  <section id="quiz" class="card hidden">
+    <div class="progress">
+      <div class="bar"><div id="barFill"></div></div>
+      <span class="txt" id="progressTxt"></span>
+    </div>
+    <div><span class="qnum" id="qnum"></span></div>
+    <div class="prompt" id="prompt"></div>
+    <div class="opts" id="opts"></div>
+    <div class="actions">
+      <button id="nextBtn" type="button" disabled>Siguiente</button>
+      <button id="skipBtn" type="button" class="ghost">No lo sé, saltar</button>
+    </div>
+    <p class="err" id="quizErr"></p>
+  </section>
 
-  <div class="bar">
-    <span class="count" id="count">0 / 120 respondidas</span>
-    <button id="submit" type="button">Enviar test</button>
-  </div>
+  <!-- 3. Result -->
+  <section id="done" class="card result hidden">
+    <p>¡Gracias, <span id="doneName"></span>!</p>
+    <p>Tu nivel aproximado es</p>
+    <div class="level" id="doneLevel"></div>
+    <p class="pts" id="donePts"></p>
+    <p class="pts">Tu profe recibirá el resultado. Ya puedes cerrar esta página.</p>
+  </section>
 </main>
 
-<section id="done" class="result hidden">
-  <p>¡Gracias, <span id="doneName"></span>!</p>
-  <p>Tu nivel aproximado es</p>
-  <div class="level" id="doneLevel"></div>
-  <p id="donePoints" class="count"></p>
-</section>
-
-<footer>Copyright ProfeDeELE.es. Uso didactico no comercial.</footer>
+<footer id="copyright"></footer>
 
 <script>
-// Served by the Flask app; grading happens server-side at /submit.
-const ENDPOINT = "/submit";
+const $ = id => document.getElementById(id);
+const TOKEN_KEY = "placement.attemptToken";
+let state = { token: null, name: "", question: null, choice: null, total: 120 };
 
-const QUESTIONS = [{"n": 1, "level": "A1", "prompt": "A - ¿Quién eres?\nB - ___ Lorena.", "options": {"a": "Soy", "b": "Eres", "c": "Es", "d": "Son"}}, {"n": 2, "level": "A1", "prompt": "A - ¿Cómo se llama usted?\nB - ___ Jacinto.", "options": {"a": "Me llamo", "b": "Te llamas", "c": "Se llama", "d": "Le llama"}}, {"n": 3, "level": "A1", "prompt": "A mis padres ___ gustan las plantas.", "options": {"a": "me", "b": "se", "c": "le", "d": "les"}}, {"n": 4, "level": "A1", "prompt": "A - No me gusta el fútbol.\nB - ___.", "options": {"a": "Yo sí", "b": "Yo no", "c": "A mí también", "d": "A mí tampoco"}}, {"n": 5, "level": "A1", "prompt": "Disculpa, ¿___ una farmacia por aquí cerca?", "options": {"a": "es", "b": "está", "c": "hay", "d": "tiene"}}, {"n": 6, "level": "A1", "prompt": "En el centro de la ciudad hay ___ parque bastante grande.", "options": {"a": "el", "b": "la", "c": "un", "d": "una"}}, {"n": 7, "level": "A1", "prompt": "A - ¿Qué te pasa?\nB - Me duele ___ cabeza.", "options": {"a": "la", "b": "mi", "c": "mí", "d": "mía"}}, {"n": 8, "level": "A1", "prompt": "A - ¿Vas andando al trabajo?\nB - Sí, voy ___ pie.", "options": {"a": "a", "b": "de", "c": "en", "d": "por"}}, {"n": 9, "level": "A1", "prompt": "¿Sabes qué ___ hacer de tarea para mañana?", "options": {"a": "tengo", "b": "debe", "c": "hay", "d": "hay que"}}, {"n": 10, "level": "A1", "prompt": "Ha llegado el ___ en el maratón.", "options": {"a": "un", "b": "uno", "c": "primer", "d": "primero"}}, {"n": 11, "level": "A1", "prompt": "Vivo en el ___ piso.", "options": {"a": "un", "b": "uno", "c": "primer", "d": "primero"}}, {"n": 12, "level": "A1", "prompt": "A - Profesor, ¿dónde ___ el examen?\nB - En el aula 120 a las nueve.", "options": {"a": "es", "b": "está", "c": "hay", "d": "tiene"}}, {"n": 13, "level": "A1", "prompt": "Lo quiero para ___.", "options": {"a": "mi", "b": "mí", "c": "yo", "d": "me"}}, {"n": 14, "level": "A1", "prompt": "A - ¿Dónde están los libros?\nB - ___ tengo en la mochila.", "options": {"a": "Lo", "b": "Les", "c": "Los", "d": "Las"}}, {"n": 15, "level": "A1", "prompt": "A - ¿Qué hora es?\nB - ___ una y media.", "options": {"a": "Es", "b": "Son", "c": "Es la", "d": "Son las"}}, {"n": 16, "level": "A1", "prompt": "A - ¿Qué tiempo hace?\nB - Pues hoy hace ___ frío.", "options": {"a": "algo", "b": "nada", "c": "muy", "d": "mucho"}}, {"n": 17, "level": "A1", "prompt": "A - ¿Qué quieres tomar, té o café?\nB - ___ té.", "options": {"a": "Me gusta", "b": "Prefiero", "c": "Tengo", "d": "Hay"}}, {"n": 18, "level": "A1", "prompt": "A - ¿A dónde vas?\nB - ___ a clase.", "options": {"a": "Voy", "b": "Vas", "c": "Va", "d": "Van"}}, {"n": 19, "level": "A1", "prompt": "El rey ___ solo tiene un poder simbólico.", "options": {"a": "belgo", "b": "belga", "c": "belgos", "d": "belgas"}}, {"n": 20, "level": "A1", "prompt": "A - ¿A qué te dedicas?\nB - ___.", "options": {"a": "Soy profesor", "b": "Vivo en Medellín", "c": "Soy de Colombia", "d": "Soy colombiano"}}, {"n": 21, "level": "A2", "prompt": "Voy a dar un paseo.\n¿Vienes ___?", "options": {"a": "con yo", "b": "conmigo", "c": "con mí", "d": "con me"}}, {"n": 22, "level": "A2", "prompt": "A - ¿Qué ha hecho Luisa esta mañana?\nB - Pues ___ ha levantado temprano para ir a correr.", "options": {"a": "se", "b": "la", "c": "le", "d": "lo"}}, {"n": 23, "level": "A2", "prompt": "A - ¿Le has dado el libro a Lucía?\nB - Sí, ___ he dado.", "options": {"a": "se lo", "b": "le lo", "c": "se la", "d": "lo se"}}, {"n": 24, "level": "A2", "prompt": "¿Todo bien? ¿Tienes ___ problema?", "options": {"a": "algún", "b": "alguna", "c": "ningún", "d": "ninguna"}}, {"n": 25, "level": "A2", "prompt": "¿___ es tu país hispanohablante favorito?", "options": {"a": "Qué", "b": "Cuál", "c": "Cuáles", "d": "Quién"}}, {"n": 26, "level": "A2", "prompt": "A - ¿Te gusta más el restaurante Casa Pedro o Casa Juana?\nB - Casa Juana es ___.", "options": {"a": "más bien", "b": "más buena", "c": "mayor", "d": "mejor"}}, {"n": 27, "level": "A2", "prompt": "A - Tengo diez libros de historia.\nB - Pues yo tengo once. Tengo más libros ___ tú.", "options": {"a": "como", "b": "que", "c": "de", "d": "para"}}, {"n": 28, "level": "A2", "prompt": "No lo veo ___ que celebró su cumpleaños.", "options": {"a": "hace", "b": "desde", "c": "desde hace", "d": "mientras"}}, {"n": 29, "level": "A2", "prompt": "A - ¿Qué tiempo hace?\nB - ___.", "options": {"a": "Es frío", "b": "Está frío", "c": "Hace frío", "d": "Tiene frío"}}, {"n": 30, "level": "A2", "prompt": "A - ¿Sabes?, todavía no ___ a los nuevos vecinos.\nB - Ah, pues te los presento luego.", "options": {"a": "conoce", "b": "conozco", "c": "conocen", "d": "conoces"}}, {"n": 31, "level": "A2", "prompt": "Ya ___ listos para empezar el examen.", "options": {"a": "somos", "b": "estamos", "c": "hacemos", "d": "tenemos"}}, {"n": 32, "level": "A2", "prompt": "El lunes no fui al trabajo porque ___ diarrea.", "options": {"a": "tenía", "b": "tuvo", "c": "ten", "d": "ha tenido"}}, {"n": 33, "level": "A2", "prompt": "Hace cinco años ___ una casa en la playa.", "options": {"a": "compro", "b": "compré", "c": "compra", "d": "he comprado"}}, {"n": 34, "level": "A2", "prompt": "A - ¿Qué tal has dormido?\nB - Pues mal. Esta noche ___ una pesadilla.", "options": {"a": "he tenido", "b": "tengo", "c": "voy a tener", "d": "estoy teniendo"}}, {"n": 35, "level": "A2", "prompt": "A - Disculpe, ¿desde dónde sale el autobús a Zaragoza?\nB - Lo ha perdido. ___.", "options": {"a": "Tiene que salir", "b": "Va a salir", "c": "Acaba de salir", "d": "Vuelve a salir"}}, {"n": 36, "level": "A2", "prompt": "A - ¿Has hecho lo que te he pedido?\nB - ___ ahora mismo.", "options": {"a": "Estoy haciéndolo", "b": "Lo estoy haciendo", "c": "Llevo haciéndolo", "d": "A y B son correctas"}}, {"n": 37, "level": "A2", "prompt": "¿___ a clases de español?", "options": {"a": "Llevas yendo", "b": "Vas yendo", "c": "Sigues yendo", "d": "Vienes yendo"}}, {"n": 38, "level": "A2", "prompt": "A - Lucía, Toma asiento y ___ silencio, por favor.\nB - Disculpe, profesor.", "options": {"a": "guarda", "b": "guarde", "c": "guardad", "d": "guarden"}}, {"n": 39, "level": "A2", "prompt": "Paula, ___ estos libros en su estantería, por favor.", "options": {"a": "pones", "b": "pone", "c": "pon", "d": "poned"}}, {"n": 40, "level": "A2", "prompt": "___ la verdad. No me mientas.", "options": {"a": "Dime", "b": "Dile", "c": "Dígame", "d": "Dígale"}}, {"n": 41, "level": "B1", "prompt": "___ había tráfico, llegamos tarde al aeropuerto.", "options": {"a": "Porque", "b": "Como", "c": "Así que", "d": "Ya que"}}, {"n": 42, "level": "B1", "prompt": "Ángel es un ___ hombre.", "options": {"a": "buen", "b": "bueno", "c": "muy bueno", "d": "muy bien"}}, {"n": 43, "level": "B1", "prompt": "El examen es, ___, el lunes a las 9:00. Lo acabo de confirmar en internet.", "options": {"a": "seguramente", "b": "con seguridad", "c": "probablemente", "d": "con probabilidad"}}, {"n": 44, "level": "B1", "prompt": "A - ¿Qué te parece Lucía?\nB - No me cayó muy bien. Es ___ antipática.", "options": {"a": "poco", "b": "un poco", "c": "poco a poco", "d": "de poco"}}, {"n": 45, "level": "B1", "prompt": "A Luisa ___ digo siempre lo que pienso.", "options": {"a": "le", "b": "lo", "c": "la", "d": "se"}}, {"n": 46, "level": "B1", "prompt": "La profesora ___ tengo en clase de español es muy simpática.", "options": {"a": "que", "b": "quien", "c": "la cual", "d": "con la cual"}}, {"n": 47, "level": "B1", "prompt": "No ___. No te lo va a devolver.", "options": {"a": "se lo prestes", "b": "se lo prestas", "c": "préstaselo", "d": "présteselo"}}, {"n": 48, "level": "B1", "prompt": "Cuando llegamos a la estación, el tren ya ___. Lo vimos alejarse.", "options": {"a": "sale", "b": "salió", "c": "ha salido", "d": "había salido"}}, {"n": 49, "level": "B1", "prompt": "___ en el semáforo cuando vi el accidente.", "options": {"a": "Estaba esperando", "b": "Estuve esperando", "c": "He estado esperando", "d": "Habría estado esperando"}}, {"n": 50, "level": "B1", "prompt": "Ojalá ___ irme a la playa mañana.", "options": {"a": "puedo", "b": "pueda", "c": "podré", "d": "podría"}}, {"n": 51, "level": "B1", "prompt": "Mañana, cuando ___ tiempo, iré a hacer la compra.", "options": {"a": "tengo", "b": "tenga", "c": "tendré", "d": "tendría"}}, {"n": 52, "level": "B1", "prompt": "Me voy antes de que ___.", "options": {"a": "llueva", "b": "llueve", "c": "lloverá", "d": "llovería"}}, {"n": 53, "level": "B1", "prompt": "¿Has visto cómo camina Juan? ¿No crees que ___ borracho?", "options": {"a": "es", "b": "está", "c": "sea", "d": "esté"}}, {"n": 54, "level": "B1", "prompt": "Le dan todo lo que quiere, es normal que ___ un malcriado.", "options": {"a": "será", "b": "es", "c": "sería", "d": "sea"}}, {"n": 55, "level": "B1", "prompt": "A - ¿Qué hora es?\nB - No lo sé, ___ las once.", "options": {"a": "son", "b": "sean", "c": "serán", "d": "serían"}}, {"n": 56, "level": "B1", "prompt": "A - Oye, Raúl, haz el favor de callarte.\nB - ¿Qué? ¿Me dices que ___? Pero si no he dicho ni una palabra.", "options": {"a": "me calle", "b": "me callo", "c": "me callaré", "d": "me callaría"}}, {"n": 57, "level": "B1", "prompt": "A - ¿Es cierto lo que dicen? ¿Se han divorciado?\nB - No creo que ___ verdad.", "options": {"a": "es", "b": "ha sido", "c": "era", "d": "sea"}}, {"n": 58, "level": "B1", "prompt": "A - Es una pena que no ___ a la fiesta.\nB - Ya, es que el próximo fin de semana trabajo.", "options": {"a": "vienes", "b": "vengas", "c": "vendrás", "d": "vendrías"}}, {"n": 59, "level": "B1", "prompt": "A - Me he hecho vegetariano.\nB - ¿Ah, sí? ¿Cuándo ___ comer carne?", "options": {"a": "te has puesto a", "b": "has vuelto a", "c": "has ido a", "d": "has dejado de"}}, {"n": 60, "level": "B1", "prompt": "Me parece bien que ___ fumar en lugares públicos.", "options": {"a": "prohíban", "b": "prohíben", "c": "prohibirán", "d": "prohibirían"}}, {"n": 61, "level": "B2", "prompt": "No es antipático, ___ tímido.", "options": {"a": "pero", "b": "sino", "c": "si no", "d": "aunque"}}, {"n": 62, "level": "B2", "prompt": "El profesor ___ me hablaste es horrible.", "options": {"a": "con que", "b": "del que", "c": "de cual", "d": "del quien"}}, {"n": 63, "level": "B2", "prompt": "La chica ___ te hablé se llama María.", "options": {"a": "a la que", "b": "de la que", "c": "con la que", "d": "para la que"}}, {"n": 64, "level": "B2", "prompt": "A - ¿Qué bolígrafo quieres? ¿El rojo o el azul?\nB - Dame ___.", "options": {"a": "cualquier", "b": "cualquiera", "c": "cualesquiera", "d": "lo que quieras"}}, {"n": 65, "level": "B2", "prompt": "Roma ___ por Rómulo y Remo.", "options": {"a": "fue fundado", "b": "fue fundada", "c": "estuvo fundado", "d": "estuvo fundada"}}, {"n": 66, "level": "B2", "prompt": "___ camareros.", "options": {"a": "Se necesita", "b": "Se necesitan", "c": "Sean necesitados", "d": "Están necesitados"}}, {"n": 67, "level": "B2", "prompt": "A - ¿Cuántos años tiene?\nB - Mmm. creo que es de la edad de mi madre, así que ___ tener unos cincuenta, aproximadamente.", "options": {"a": "debe de", "b": "ha de", "c": "hay que", "d": "tiene que"}}, {"n": 68, "level": "B2", "prompt": "A - ¿Qué desea?\nB - Pues no sé exactamente. Busco un libro infantil que ___ divertido. Es para mi sobrino pequeño.", "options": {"a": "es", "b": "sea", "c": "fuera", "d": "sería"}}, {"n": 69, "level": "B2", "prompt": "A - ¿Dónde estabas? Ya estaba empezando a preocuparme.\nB - Siento que te ___ preocupado tanto. La próxima vez llamaré si llego tarde.", "options": {"a": "has", "b": "hayas", "c": "habías", "d": "hubieras"}}, {"n": 70, "level": "B2", "prompt": "Dudo mucho que ___ feliz.", "options": {"a": "es", "b": "sea", "c": "ha sido", "d": "había sido"}}, {"n": 71, "level": "B2", "prompt": "Es lógico que ___ enfadado.", "options": {"a": "es", "b": "sea", "c": "esté", "d": "está"}}, {"n": 72, "level": "B2", "prompt": "No porque ___ dinero quiere decir que sea feliz.", "options": {"a": "tiene", "b": "tenga", "c": "tendrá", "d": "ha tenido"}}, {"n": 73, "level": "B2", "prompt": "Quiso esperar hasta que ___.", "options": {"a": "llegues", "b": "llegaras", "c": "llegarías", "d": "hayas llegado"}}, {"n": 74, "level": "B2", "prompt": "Hace veinte años que estamos casados y parece como si nos ___ ayer.", "options": {"a": "conocíamos", "b": "conociéramos", "c": "conoceríamos", "d": "hubiéramos conocido"}}, {"n": 75, "level": "B2", "prompt": "Llegaré a tiempo, a no ser que ___ un atasco.", "options": {"a": "hay", "b": "haya", "c": "habrá", "d": "habría"}}, {"n": 76, "level": "B2", "prompt": "No iré a la excursión, salvo si ___ del resfriado.", "options": {"a": "me recupero", "b": "me recupere", "c": "me recuperaré", "d": "me habré recuperado"}}, {"n": 77, "level": "B2", "prompt": "Si ___, no iremos a la playa.", "options": {"a": "llueve", "b": "llueva", "c": "lloverá", "d": "llovería"}}, {"n": 78, "level": "B2", "prompt": "Si hubiera podido, ___ a la fiesta.", "options": {"a": "iba", "b": "iría", "c": "fuera", "d": "habría ido"}}, {"n": 79, "level": "B2", "prompt": "Si me hubieras llamado antes, ahora no te ___ bajo la lluvia.", "options": {"a": "espero", "b": "esperaría", "c": "había esperado", "d": "habría esperado"}}, {"n": 80, "level": "B2", "prompt": "___ calvo muy joven.", "options": {"a": "Se hizo", "b": "Se volvió", "c": "Se quedó", "d": "Se puso"}}, {"n": 81, "level": "C1", "prompt": "Un ___ de la población del país es pobre.", "options": {"a": "cincuenta y uno por ciento", "b": "cincuenta y uno porciento", "c": "cincuenta y un porciento", "d": "cincuenta y un por ciento"}}, {"n": 82, "level": "C1", "prompt": "Es más que amable. Es ___.", "options": {"a": "amablísimo", "b": "amabilísimo", "c": "A y B son correctas", "d": "Ninguna es correcta"}}, {"n": 83, "level": "C1", "prompt": "Pablo siempre habla ___.", "options": {"a": "de mas", "b": "de más", "c": "dé más", "d": "demás"}}, {"n": 84, "level": "C1", "prompt": "El vecino ___ hijo es arquitecto apenas saluda.", "options": {"a": "cuyo", "b": "que su", "c": "quien", "d": "del cual"}}, {"n": 85, "level": "C1", "prompt": "Lucho ___ nuestra relación salga adelante.", "options": {"a": "por que", "b": "porque", "c": "por qué", "d": "porqué"}}, {"n": 86, "level": "C1", "prompt": "Rechazaron mi solicitud ___ cuando tenía el mejor expediente.", "options": {"a": "aun", "b": "aún", "c": "todavía", "d": "hasta"}}, {"n": 87, "level": "C1", "prompt": "Come cuanto te ___.", "options": {"a": "apetece", "b": "apeteciera", "c": "apetecerá", "d": "apetezca"}}, {"n": 88, "level": "C1", "prompt": "No me fío ___ él.", "options": {"a": "de", "b": "a", "c": "en", "d": "con"}}, {"n": 89, "level": "C1", "prompt": "___ ser de tu edad, parece mucho más viejo.", "options": {"a": "Para", "b": "Por", "c": "Al", "d": "De"}}, {"n": 90, "level": "C1", "prompt": "Cuidó ___ sus padres hasta que fallecieron.", "options": {"a": "a", "b": "de", "c": "por", "d": "A y B son correctas"}}, {"n": 91, "level": "C1", "prompt": "___ cólera es una enfermedad que se transmite a través del agua contaminada.", "options": {"a": "El", "b": "La", "c": "Un", "d": "Una"}}, {"n": 92, "level": "C1", "prompt": "Tuvieron una crisis de pareja, de ahí que ___ divorciado.", "options": {"a": "se han", "b": "se habrán", "c": "se hayan", "d": "se habrían"}}, {"n": 93, "level": "C1", "prompt": "Quién ___ tus años.", "options": {"a": "tenga", "b": "tuviera", "c": "tendría", "d": "tendrá"}}, {"n": 94, "level": "C1", "prompt": "Ha ___ a su hijo.", "options": {"a": "maldecido", "b": "maldito", "c": "maldicho", "d": "mal dicho"}}, {"n": 95, "level": "C1", "prompt": "El presidente insistió ___ había ganado las elecciones.", "options": {"a": "que", "b": "en que", "c": "de que", "d": "sobre que"}}, {"n": 96, "level": "C1", "prompt": "Tose sin parar ___ no deja de fumar.", "options": {"a": "por la razón de que", "b": "gracias a que", "c": "por culpa de que", "d": "como"}}, {"n": 97, "level": "C1", "prompt": "Como ___ tarde, se va a enterar.", "options": {"a": "llega", "b": "llegue", "c": "llegará", "d": "llegaría"}}, {"n": 98, "level": "C1", "prompt": "Puede que ___ necesitado de dinero, porque vendió su casa de la playa.", "options": {"a": "anduvo", "b": "andara", "c": "andase", "d": "anduviera"}}, {"n": 99, "level": "C1", "prompt": "Que ___ que no lo querías le rompió el corazón.", "options": {"a": "dices", "b": "dijiste", "c": "digas", "d": "dijeras"}}, {"n": 100, "level": "C1", "prompt": "Con lo que te ___ y me tratas así.", "options": {"a": "haya ayudado", "b": "había ayudado", "c": "hubiera ayudado", "d": "he ayudado"}}, {"n": 101, "level": "C2", "prompt": "Allá donde ___, haz lo que vieres.", "options": {"a": "vayas", "b": "fueras", "c": "fueres", "d": "hubieres ido"}}, {"n": 102, "level": "C2", "prompt": "Vamos a una manifestación porque queremos que ___ las corridas de toros.", "options": {"a": "abolan", "b": "abuelan", "c": "abulan", "d": "abolieran"}}, {"n": 103, "level": "C2", "prompt": "¿___ escuchando nuestra conversación a escondidas?", "options": {"a": "Con que", "b": "Con qué", "c": "Conque", "d": "Con lo que"}}, {"n": 104, "level": "C2", "prompt": "Le gustó tanto esa ciudad que se prometió ___ y a su familia que volverían.", "options": {"a": "asimismo", "b": "así mismo", "c": "a sí mismo", "d": "consigo mismo"}}, {"n": 105, "level": "C2", "prompt": "___ que vea al sospechoso, deberá avisar a la policía inmediatamente.", "options": {"a": "Quienquiera", "b": "Quien quiera", "c": "A quienquiera", "d": "A quien quiera"}}, {"n": 106, "level": "C2", "prompt": "Un nuevo impuesto ___ la entrada de turistas en Venecia.", "options": {"a": "gravará", "b": "grabará", "c": "gravara", "d": "grabara"}}, {"n": 107, "level": "C2", "prompt": "Me alegro ___ que me hagas esa pregunta.", "options": {"a": "No hay preposición", "b": "de", "c": "por", "d": "con"}}, {"n": 108, "level": "C2", "prompt": "El rey abdicó ___ trono a favor de su hijo.", "options": {"a": "al", "b": "el", "c": "del", "d": "B y C son correctas"}}, {"n": 109, "level": "C2", "prompt": "A pesar de ser gemelos, tienen ___ muy diferentes.", "options": {"a": "carácter", "b": "carácteres", "c": "caracteres", "d": "caracter"}}, {"n": 110, "level": "C2", "prompt": "A - No es verdad lo que dices.\nB - Ya me has ___ otra vez.", "options": {"a": "contradecido", "b": "contradicho", "c": "contradicto", "d": "contraindicado"}}, {"n": 111, "level": "C2", "prompt": "Le ___ una herida en la frente.", "options": {"a": "infligió", "b": "infringió", "c": "incidió", "d": "indujo"}}, {"n": 112, "level": "C2", "prompt": "Al alumno no le ___ demasiado la aclaración.", "options": {"a": "satisfació", "b": "satisfizo", "c": "satisfició", "d": "satisfecho"}}, {"n": 113, "level": "C2", "prompt": "Durante la redacción de su tesis doctoral se ___ leyendo manuscritos y caligrafías antiguas.", "options": {"a": "desojó", "b": "deshojó", "c": "desgajó", "d": "desaojó"}}, {"n": 114, "level": "C2", "prompt": "Durante los años ochenta, en su época de mayor creatividad, el cantante sacó varios ___ de alta calidad.", "options": {"a": "albums", "b": "albuns", "c": "álbumes", "d": "álbunes"}}, {"n": 115, "level": "C2", "prompt": "Señala cuál de las siguientes frases NO es correcta.", "options": {"a": "Se nombraron nuevos embajadores", "b": "Se nombraron a los nuevos embajadores", "c": "Se nombró a los nuevos embajadores"}}, {"n": 116, "level": "C2", "prompt": "Aun a riesgo de que me ___ del trabajo, pienso expresar mi opinión.", "options": {"a": "echan", "b": "echarían", "c": "echen", "d": "echarán"}}, {"n": 117, "level": "C2", "prompt": "Todo ___ venir, que se inscriba.", "options": {"a": "quien quiera", "b": "quienquiera", "c": "el que quiera", "d": "los que quieran"}}, {"n": 118, "level": "C2", "prompt": "El jefe de recursos humanos seleccionó los ___ de los candidatos.", "options": {"a": "currículum vitae", "b": "curriculum vitae", "c": "currículos vitae", "d": "curricula vitae"}}, {"n": 119, "level": "C2", "prompt": "Y estas son, ___, las características generales del Barroco.", "options": {"a": "por grosso modo", "b": "grosso modo", "c": "a grosso modo", "d": "de grosso modo"}}, {"n": 120, "level": "C2", "prompt": "A pesar de ser un escritor ___ en su época, Cervantes nunca fue rico.", "options": {"a": "celebérrimo", "b": "celeberrimo", "c": "celebrísimo", "d": "celebrisimo"}}];
-const TOTAL = QUESTIONS.length;
-const answers = {};
+async function api(path, body) {
+  const opts = body
+    ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+    : {};
+  const res = await fetch(path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok && !data.resync) throw Object.assign(new Error(data.error || "Error de red"), { status: res.status });
+  return data;
+}
 
-const qWrap = document.getElementById("questions");
-const countEl = document.getElementById("count");
+function show(id) {
+  ["gate", "quiz", "done"].forEach(s => $(s).classList.toggle("hidden", s !== id));
+  window.scrollTo(0, 0);
+}
 
-QUESTIONS.forEach(q => {
-  const card = document.createElement("section");
-  card.className = "card q";
-  card.id = "q" + q.n;
-  const optsHtml = Object.entries(q.options).map(([k, v]) => `
-    <label class="opt" data-q="${q.n}" data-k="${k}">
-      <input type="radio" name="q${q.n}" value="${k}">
-      <span class="key">${k.toUpperCase()}</span>
-      <span class="txt"></span>
-    </label>`).join("");
-  card.innerHTML = `
-    <div><span class="level-tag">${q.level}</span>
-    <span class="num">${q.n}</span><span class="prompt"></span></div>
-    <div class="opts">${optsHtml}</div>`;
-  card.querySelector(".prompt").textContent = q.prompt;
-  const txts = card.querySelectorAll(".txt");
-  Object.values(q.options).forEach((v, i) => { txts[i].textContent = v; });
-  qWrap.appendChild(card);
-});
-
-qWrap.addEventListener("change", e => {
-  if (e.target.type !== "radio") return;
-  const n = e.target.name.slice(1);
-  answers[n] = e.target.value;
-  const card = document.getElementById("q" + n);
-  card.querySelectorAll(".opt").forEach(o => o.classList.remove("chosen"));
-  e.target.closest(".opt").classList.add("chosen");
-  countEl.textContent = Object.keys(answers).length + " / " + TOTAL + " respondidas";
-});
-
-document.getElementById("submit").addEventListener("click", async () => {
-  const name = document.getElementById("name").value.trim();
-  const klass = document.getElementById("klass").value.trim();
-  if (!name || !klass) { alert("Escribe tu nombre y tu clase."); return; }
-  const btn = document.getElementById("submit");
-  btn.disabled = true; btn.textContent = "Enviando...";
-
-  const payload = { name, klass, answers, ts: new Date().toISOString() };
-  try {
-    if (!ENDPOINT) throw new Error("no-endpoint");
-    const res = await fetch(ENDPOINT, {
-      method: "POST",
-      body: JSON.stringify(payload),
-      headers: { "Content-Type": "text/plain;charset=utf-8" }
+function render(data) {
+  if (data.name) state.name = data.name;
+  if (data.done) {
+    localStorage.removeItem(TOKEN_KEY);
+    $("doneName").textContent = state.name;
+    $("doneLevel").textContent = data.level === "-" ? "Pre-A1" : data.level;
+    $("donePts").textContent = data.points + " / " + data.total + " puntos";
+    show("done");
+    return;
+  }
+  state.total = data.total;
+  state.question = data.question;
+  state.choice = null;
+  const q = data.question;
+  $("qnum").textContent = q.n;
+  $("prompt").textContent = q.prompt;
+  const pct = Math.round((data.answered / data.total) * 100);
+  $("barFill").style.width = pct + "%";
+  $("progressTxt").textContent = "Pregunta " + q.n + " de " + data.total;
+  const opts = $("opts");
+  opts.innerHTML = "";
+  Object.entries(q.options).forEach(([k, v]) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "opt"; b.dataset.k = k;
+    const key = document.createElement("span"); key.className = "key"; key.textContent = k.toUpperCase();
+    const txt = document.createElement("span"); txt.textContent = v;
+    b.append(key, txt);
+    b.addEventListener("click", () => {
+      state.choice = k;
+      opts.querySelectorAll(".opt").forEach(o => o.classList.toggle("chosen", o.dataset.k === k));
+      $("nextBtn").disabled = false;
     });
-    const data = await res.json();
-    showDone(name, data.level, data.points);
+    opts.appendChild(b);
+  });
+  $("nextBtn").disabled = true;
+  $("quizErr").textContent = "";
+  show("quiz");
+}
+
+async function submitAnswer(choice) {
+  const btns = [$("nextBtn"), $("skipBtn")];
+  btns.forEach(b => b.disabled = true);
+  $("quizErr").textContent = "";
+  try {
+    const data = await api("/api/answer", { token: state.token, n: state.question.n, choice });
+    render(data);
   } catch (err) {
-    btn.disabled = false; btn.textContent = "Enviar test";
-    alert("No se pudo enviar. Revisa tu conexión e inténtalo otra vez.");
+    if (err.status === 401) { localStorage.removeItem(TOKEN_KEY); show("gate"); return; }
+    $("quizErr").textContent = "No se pudo guardar. Revisa tu conexión e inténtalo otra vez.";
+    $("nextBtn").disabled = state.choice == null;
+    $("skipBtn").disabled = false;
+  }
+}
+
+$("nextBtn").addEventListener("click", () => { if (state.choice != null) submitAnswer(state.choice); });
+$("skipBtn").addEventListener("click", () => submitAnswer(null));
+
+$("startBtn").addEventListener("click", async () => {
+  const name = $("name").value.trim(), klass = $("klass").value.trim(), code = $("code").value.trim();
+  $("gateErr").textContent = "";
+  if (!name || !klass || !code) { $("gateErr").textContent = "Rellena los tres campos."; return; }
+  $("startBtn").disabled = true;
+  try {
+    const data = await api("/api/start", { name, klass, code });
+    state.token = data.token;
+    localStorage.setItem(TOKEN_KEY, data.token);
+    render(data);
+  } catch (err) {
+    $("gateErr").textContent = err.message;
+  } finally {
+    $("startBtn").disabled = false;
   }
 });
 
-function showDone(name, level, points) {
-  document.getElementById("app").classList.add("hidden");
-  document.getElementById("done").classList.remove("hidden");
-  document.getElementById("doneName").textContent = name;
-  document.getElementById("doneLevel").textContent = level;
-  const p = document.getElementById("donePoints");
-  p.textContent = (points == null) ? "" : (points + " / " + TOTAL + " puntos");
-  window.scrollTo(0, 0);
-}
+// Boot: load instructions, then resume an in-progress attempt if there is one.
+(async () => {
+  try {
+    const info = await api("/api/notes");
+    $("title").textContent = info.title;
+    $("source").textContent = info.source;
+    $("notes").innerHTML = "";
+    info.notes.forEach(n => { const li = document.createElement("li"); li.textContent = n; $("notes").appendChild(li); });
+    $("copyright").textContent = "© " + info.source + " · uso didáctico no comercial";
+  } catch (_) {}
+
+  const saved = localStorage.getItem(TOKEN_KEY);
+  if (saved) {
+    try {
+      const data = await api("/api/next?token=" + encodeURIComponent(saved));
+      state.token = saved;
+      render(data);
+      return;
+    } catch (_) { localStorage.removeItem(TOKEN_KEY); }
+  }
+  show("gate");
+})();
 </script>
 </body>
 </html>
