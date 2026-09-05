@@ -78,6 +78,11 @@ def init_db():
     conn.close()
 
 
+# Ensure the table exists as soon as the module is imported, so the app works
+# both under `python app.py` and under a WSGI server (PythonAnywhere, gunicorn).
+init_db()
+
+
 # ---- Grading ------------------------------------------------------------
 def grade(answers: dict) -> dict:
     """answers maps question-number (as str or int) -> chosen option letter.
@@ -250,5 +255,4 @@ def export_csv():
 
 
 if __name__ == "__main__":
-    init_db()
     app.run(host="127.0.0.1", port=5000, debug=True)
