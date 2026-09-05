@@ -40,6 +40,30 @@ DB_PATH = Path(os.environ.get("DB_PATH", ROOT / "results.db"))
 TEACHER_PASSWORD = os.environ.get("TEACHER_PASSWORD", "changeme")
 ACCESS_CODE = os.environ.get("ACCESS_CODE", "clase")
 
+
+def _app_version() -> str:
+    """'1.1.0+855d356' — VERSION file plus the git commit, if available.
+    Stamped on every attempt so results can be traced to the exact code."""
+    ver = (ROOT / "VERSION").read_text().strip() if (ROOT / "VERSION").exists() else "0.0.0"
+    try:
+        import subprocess
+        sha = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=2,
+        ).stdout.strip()
+        dirty = subprocess.run(
+            ["git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=no"],
+            capture_output=True, text=True, timeout=2,
+        ).stdout.strip()
+        if sha:
+            ver += "+" + sha + ("-dirty" if dirty else "")
+    except Exception:
+        pass
+    return ver
+
+
+APP_VERSION = _app_version()
+
 # ---- Test definition ----------------------------------------------------
 DATA = json.loads((ROOT / "test-data.json").read_text(encoding="utf-8"))
 META = DATA["meta"]
@@ -109,6 +133,12 @@ def init_db():
         );
         """
     )
+    # Migrations: add columns introduced after the first release (idempotent).
+    have = {r[1] for r in conn.execute("PRAGMA table_info(attempts)").fetchall()}
+    if "app_version" not in have:
+        conn.execute("ALTER TABLE attempts ADD COLUMN app_version TEXT")
+    if "duration_s" not in have:
+        conn.execute("ALTER TABLE attempts ADD COLUMN duration_s INTEGER")
     conn.commit()
     conn.close()
 
@@ -159,13 +189,29 @@ def finish_attempt(attempt_id: int) -> dict:
     stats = per_level_stats(attempt_id)
     points = sum(s["correct"] for s in stats.values())
     level = compute_level(stats)
+    started = db().execute(
+        "SELECT started FROM attempts WHERE id=?", (attempt_id,)
+    ).fetchone()["started"]
+    finished = now_iso()
+    duration_s = int(
+        (datetime.fromisoformat(finished) - datetime.fromisoformat(started)).total_seconds()
+    )
     db().execute(
-        "UPDATE attempts SET status='finished', finished=?, points=?, level=?"
-        " WHERE id=?",
-        (now_iso(), points, level, attempt_id),
+        "UPDATE attempts SET status='finished', finished=?, points=?, level=?,"
+        " duration_s=? WHERE id=?",
+        (finished, points, level, duration_s, attempt_id),
     )
     db().commit()
-    return {"done": True, "level": level, "points": points, "total": TOTAL}
+    return {"done": True, "level": level, "points": points, "total": TOTAL,
+            "duration_s": duration_s}
+
+
+def fmt_duration(s) -> str:
+    if s is None:
+        return "—"
+    m, sec = divmod(int(s), 60)
+    h, m = divmod(m, 60)
+    return f"{h}:{m:02d}:{sec:02d}" if h else f"{m}:{sec:02d}"
 
 
 def next_payload(attempt) -> dict:
@@ -227,9 +273,9 @@ def start():
     else:
         token = secrets.token_urlsafe(24)
         db().execute(
-            "INSERT INTO attempts (token, name, klass, name_key, klass_key, started)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
-            (token, name, klass, name_key, klass_key, now_iso()),
+            "INSERT INTO attempts (token, name, klass, name_key, klass_key, started,"
+            " app_version) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (token, name, klass, name_key, klass_key, now_iso(), APP_VERSION),
         )
         db().commit()
         attempt = get_attempt_by_token(token)
@@ -335,7 +381,8 @@ TEACHER_HTML = """
 <header>
   <div>
     <h1>Consola del profesor — {{ rows|length }} intentos</h1>
-    <div class="meta">Código de acceso para estudiantes: <b>{{ access_code }}</b></div>
+    <div class="meta">Código de acceso para estudiantes: <b>{{ access_code }}</b>
+      &nbsp;·&nbsp; app v{{ app_version }}</div>
   </div>
   <div>
     <a class="btn" href="{{ url_for('export_csv') }}">Resultados CSV</a>
@@ -346,8 +393,8 @@ TEACHER_HTML = """
  {% if rows %}
  <table>
   <tr><th>#</th><th>Inicio</th><th>Nombre</th><th>Clase</th><th>Estado</th>
-      <th>Puntos</th><th>Nivel</th>
-      {% for lvl in levels %}<th>{{ lvl }}</th>{% endfor %}<th></th></tr>
+      <th>Tiempo</th><th>Puntos</th><th>Nivel</th>
+      {% for lvl in levels %}<th>{{ lvl }}</th>{% endfor %}<th>Versión</th><th></th></tr>
   {% for r in rows %}
   <tr>
    <td class="muted">{{ r.id }}</td>
@@ -356,11 +403,13 @@ TEACHER_HTML = """
    <td>{{ r.klass }}</td>
    <td>{% if r.status == 'finished' %}Terminado{% else %}
        <span class="prog">En curso ({{ r.answered }}/{{ total }})</span>{% endif %}</td>
+   <td class="muted">{{ r.duration }}</td>
    <td>{% if r.points is not none %}{{ r.points }} / {{ total }}{% else %}—{% endif %}</td>
    <td class="lvl">{{ r.level or '—' }}</td>
    {% for lvl in levels %}
    <td class="muted">{% if r.stats[lvl].answered %}{{ r.stats[lvl].correct }}/{{ per_level }}{% else %}·{% endif %}</td>
    {% endfor %}
+   <td class="muted" style="font-size:12px">{{ r.app_version or '—' }}</td>
    <td><form method="post" action="{{ url_for('delete_attempt', attempt_id=r.id) }}"
              onsubmit="return confirm('¿Borrar el intento de {{ r.name }}? Podrá repetir el test.')">
        <button class="del" type="submit">Borrar</button></form></td>
@@ -380,6 +429,7 @@ def all_attempts_with_stats():
         d = dict(r)
         d["stats"] = per_level_stats(r["id"])
         d["answered"] = sum(s["answered"] for s in d["stats"].values())
+        d["duration"] = fmt_duration(d.get("duration_s"))
         rows.append(d)
     return rows
 
@@ -390,6 +440,7 @@ def teacher():
     return render_template_string(
         TEACHER_HTML, rows=all_attempts_with_stats(), levels=LEVELS,
         total=TOTAL, per_level=PER_LEVEL, access_code=ACCESS_CODE,
+        app_version=APP_VERSION,
     )
 
 
@@ -431,8 +482,10 @@ DETAIL_HTML = """
     <h1>{{ a.name }} · {{ a.klass }}</h1>
     <div class="meta">
       {% if a.status == 'finished' %}Terminado · nivel <b>{{ a.level }}</b> · {{ a.points }}/{{ total }} puntos
+      · tiempo {{ duration }}
       {% else %}En curso · {{ rows|length }}/{{ total }} respondidas{% endif %}
       · inicio {{ a.started[:16].replace('T',' ') }}
+      · app v{{ a.app_version or '?' }}
     </div>
   </div>
   <a class="btn" href="{{ url_for('teacher') }}">← Volver</a>
@@ -481,7 +534,8 @@ def attempt_detail(attempt_id):
     if not a:
         return "No existe.", 404
     return render_template_string(
-        DETAIL_HTML, a=a, rows=attempt_answers(attempt_id), total=TOTAL
+        DETAIL_HTML, a=a, rows=attempt_answers(attempt_id), total=TOTAL,
+        duration=fmt_duration(a["duration_s"]),
     )
 
 
@@ -510,15 +564,19 @@ def export_csv():
     buf = io.StringIO()
     buf.write("﻿")  # BOM so Excel reads accents correctly
     w = csv.writer(buf)
-    w.writerow(["id", "inicio", "fin", "nombre", "clase", "estado", "puntos", "nivel"]
-               + [f"aciertos_{lvl}" for lvl in LEVELS])
+    w.writerow(["id", "inicio", "fin", "duracion_s", "nombre", "clase", "estado",
+                "puntos", "nivel"]
+               + [f"aciertos_{lvl}" for lvl in LEVELS] + ["version_app"])
     for r in sorted(all_attempts_with_stats(), key=lambda x: x["id"]):
         w.writerow(
-            [r["id"], r["started"], r["finished"] or "", r["name"], r["klass"],
+            [r["id"], r["started"], r["finished"] or "",
+             r["duration_s"] if r.get("duration_s") is not None else "",
+             r["name"], r["klass"],
              "terminado" if r["status"] == "finished" else "en curso",
              r["points"] if r["points"] is not None else "", r["level"] or ""]
             + [r["stats"][lvl]["correct"] if r["stats"][lvl]["answered"] else ""
                for lvl in LEVELS]
+            + [r.get("app_version") or ""]
         )
     fname = f"resultados_{datetime.now().strftime('%Y%m%d')}.csv"
     return Response(buf.getvalue(), mimetype="text/csv",

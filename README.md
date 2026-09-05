@@ -65,6 +65,18 @@ install and for always-on hosting on PythonAnywhere.
 - **Level** = the last block passed. A student who fails A1 gets `-`
   (shown as "Pre-A1").
 
+## Versioning
+
+The app version lives in `VERSION` (semantic versioning) and releases are git
+tags (`v1.1.0`). At startup the server combines it with the current git commit
+into a string like `1.1.0+855d356` (`-dirty` if there are uncommitted changes).
+Every attempt is stamped with that string, and it appears in the console and
+both CSVs, so any result can be traced to the exact code that produced it.
+Each finished attempt also records the time taken (`duration_s`), shown in the
+console as `m:ss`.
+
+To release: bump `VERSION`, commit, then `git tag v<version>`.
+
 ## Files
 
 | File | Purpose |
