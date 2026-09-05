@@ -337,7 +337,10 @@ TEACHER_HTML = """
     <h1>Consola del profesor — {{ rows|length }} intentos</h1>
     <div class="meta">Código de acceso para estudiantes: <b>{{ access_code }}</b></div>
   </div>
-  <a class="btn" href="{{ url_for('export_csv') }}">Descargar CSV (Excel)</a>
+  <div>
+    <a class="btn" href="{{ url_for('export_csv') }}">Resultados CSV</a>
+    <a class="btn" href="{{ url_for('export_answers_csv') }}">Respuestas CSV</a>
+  </div>
 </header>
 <main>
  {% if rows %}
@@ -349,7 +352,7 @@ TEACHER_HTML = """
   <tr>
    <td class="muted">{{ r.id }}</td>
    <td class="muted">{{ r.started[:16].replace('T',' ') }}</td>
-   <td>{{ r.name }}</td>
+   <td><a href="{{ url_for('attempt_detail', attempt_id=r.id) }}">{{ r.name }}</a></td>
    <td>{{ r.klass }}</td>
    <td>{% if r.status == 'finished' %}Terminado{% else %}
        <span class="prog">En curso ({{ r.answered }}/{{ total }})</span>{% endif %}</td>
@@ -396,6 +399,109 @@ def delete_attempt(attempt_id):
     db().execute("DELETE FROM attempts WHERE id = ?", (attempt_id,))
     db().commit()
     return redirect(url_for("teacher"))
+
+
+DETAIL_HTML = """
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ a.name }} — respuestas</title>
+<style>
+ body{font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+      margin:0;background:#f8fafc;color:#1f2937}
+ header{background:#1f2937;color:#fff;padding:14px 20px;display:flex;
+        justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+ header h1{margin:0;font-size:18px}
+ header .meta{color:#cbd5e1;font-size:13px}
+ a.btn{background:#fff;color:#1f2937;text-decoration:none;padding:8px 14px;
+       border-radius:8px;font-weight:700}
+ main{max-width:1100px;margin:0 auto;padding:16px;overflow-x:auto}
+ table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e5e7eb;
+       border-radius:8px;overflow:hidden}
+ th,td{padding:7px 10px;text-align:left;border-bottom:1px solid #e5e7eb;font-size:14px;
+       vertical-align:top}
+ th{background:#f1f5f9;white-space:nowrap}
+ tr:last-child td{border-bottom:0}
+ .ok{color:#16a34a;font-weight:700}.bad{color:#dc2626;font-weight:700}.blank{color:#6b7280}
+ .muted{color:#6b7280}
+ .lvl{font-size:12px;color:#6b7280;border:1px solid #e5e7eb;border-radius:999px;padding:1px 7px}
+ .prompt{white-space:pre-line;max-width:420px}
+</style></head><body>
+<header>
+  <div>
+    <h1>{{ a.name }} · {{ a.klass }}</h1>
+    <div class="meta">
+      {% if a.status == 'finished' %}Terminado · nivel <b>{{ a.level }}</b> · {{ a.points }}/{{ total }} puntos
+      {% else %}En curso · {{ rows|length }}/{{ total }} respondidas{% endif %}
+      · inicio {{ a.started[:16].replace('T',' ') }}
+    </div>
+  </div>
+  <a class="btn" href="{{ url_for('teacher') }}">← Volver</a>
+</header>
+<main>
+ <table>
+  <tr><th>#</th><th>Nivel</th><th>Pregunta</th><th>Respuesta</th><th>Correcta</th><th>Resultado</th><th>Hora</th></tr>
+  {% for r in rows %}
+  <tr>
+   <td class="muted">{{ r.n }}</td>
+   <td><span class="lvl">{{ r.level }}</span></td>
+   <td class="prompt">{{ r.prompt }}</td>
+   <td>{% if r.choice %}<b>{{ r.choice|upper }}</b> · {{ r.choice_text }}{% else %}<span class="blank">— en blanco —</span>{% endif %}</td>
+   <td class="muted"><b>{{ r.answer|upper }}</b> · {{ r.answer_text }}</td>
+   <td>{% if r.choice is none %}<span class="blank">blanco</span>{% elif r.correct %}<span class="ok">✓</span>{% else %}<span class="bad">✗</span>{% endif %}</td>
+   <td class="muted">{{ r.ts[11:19] }}</td>
+  </tr>
+  {% endfor %}
+ </table>
+</main></body></html>
+"""
+
+
+def attempt_answers(attempt_id: int):
+    """Every answer for one attempt, enriched with question text and the key."""
+    out = []
+    for r in db().execute(
+        "SELECT n, choice, correct, ts FROM answers WHERE attempt_id=? ORDER BY n",
+        (attempt_id,),
+    ).fetchall():
+        q = QUESTIONS[r["n"]]
+        out.append({
+            "n": r["n"], "level": q["level"], "prompt": q["prompt"],
+            "choice": r["choice"],
+            "choice_text": q["options"].get(r["choice"], "") if r["choice"] else "",
+            "answer": q["answer"], "answer_text": q["options"][q["answer"]],
+            "correct": r["correct"], "ts": r["ts"],
+        })
+    return out
+
+
+@app.route("/teacher/attempt/<int:attempt_id>")
+@require_teacher
+def attempt_detail(attempt_id):
+    a = db().execute("SELECT * FROM attempts WHERE id=?", (attempt_id,)).fetchone()
+    if not a:
+        return "No existe.", 404
+    return render_template_string(
+        DETAIL_HTML, a=a, rows=attempt_answers(attempt_id), total=TOTAL
+    )
+
+
+@app.route("/export-answers.csv")
+@require_teacher
+def export_answers_csv():
+    """One row per student per question: pivot-friendly for Excel."""
+    buf = io.StringIO()
+    buf.write("﻿")
+    w = csv.writer(buf)
+    w.writerow(["intento_id", "nombre", "clase", "pregunta", "nivel",
+                "respuesta", "correcta", "resultado", "hora"])
+    for a in db().execute("SELECT * FROM attempts ORDER BY id").fetchall():
+        for r in attempt_answers(a["id"]):
+            result = "blanco" if r["choice"] is None else ("acierto" if r["correct"] else "fallo")
+            w.writerow([a["id"], a["name"], a["klass"], r["n"], r["level"],
+                        (r["choice"] or "").upper(), r["answer"].upper(), result, r["ts"]])
+    fname = f"respuestas_{datetime.now().strftime('%Y%m%d')}.csv"
+    return Response(buf.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
 @app.route("/export.csv")
