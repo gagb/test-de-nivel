@@ -18,16 +18,18 @@ test.
 
 ## One-time setup
 
-Install `cloudflared` (this is an Intel Mac). In Terminal:
+Install `cloudflared` (this is an Intel Mac; no sudo needed). In Terminal:
 
 ```bash
-curl -L -o /tmp/cloudflared.tgz \
+curl -sSL -o /tmp/cloudflared.tgz \
   https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64.tgz
-tar -xzf /tmp/cloudflared.tgz -C /tmp
-sudo mv /tmp/cloudflared /usr/local/bin/cloudflared
-chmod +x /usr/local/bin/cloudflared
-cloudflared --version        # confirm it works
+mkdir -p ~/.local/bin && tar -xzf /tmp/cloudflared.tgz -C ~/.local/bin
+chmod +x ~/.local/bin/cloudflared
+~/.local/bin/cloudflared --version        # confirm it works
 ```
+
+`serve.sh` looks in `~/.local/bin` automatically, so you don't need to change
+your PATH.
 
 Install the Python dependency once:
 
