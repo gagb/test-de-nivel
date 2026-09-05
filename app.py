@@ -245,8 +245,9 @@ def index():
 
 @app.route("/api/notes")
 def notes():
-    return jsonify({"title": META["title"], "source": META["source"],
-                    "notes": META["notes"], "total": TOTAL})
+    # Student-facing: neutral title, no publisher branding, plus app version.
+    return jsonify({"title": "Test de nivel de español", "notes": META["notes"],
+                    "total": TOTAL, "version": APP_VERSION})
 
 
 @app.route("/api/start", methods=["POST"])

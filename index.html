@@ -74,8 +74,7 @@
 </head>
 <body>
 <header>
-  <h1 id="title">Test de nivel</h1>
-  <p id="source"></p>
+  <h1 id="title">Test de nivel de español</h1>
 </header>
 
 <main>
@@ -122,7 +121,7 @@
   </section>
 </main>
 
-<footer id="copyright"></footer>
+<footer id="version"></footer>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -224,10 +223,10 @@ $("startBtn").addEventListener("click", async () => {
   try {
     const info = await api("/api/notes");
     $("title").textContent = info.title;
-    $("source").textContent = info.source;
+    document.title = info.title;
     $("notes").innerHTML = "";
     info.notes.forEach(n => { const li = document.createElement("li"); li.textContent = n; $("notes").appendChild(li); });
-    $("copyright").textContent = "© " + info.source + " · uso didáctico no comercial";
+    $("version").textContent = "v" + info.version;
   } catch (_) {}
 
   const saved = localStorage.getItem(TOKEN_KEY);
