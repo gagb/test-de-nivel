@@ -55,6 +55,10 @@ Notes:
 - The `trycloudflare.com` URL is new every run and stops working once you press
   Ctrl-C. Start the script before class and keep it running until everyone is
   done.
+- The new URL can take 10–20 seconds to start resolving. If a browser says it
+  can't find the site right after launch, wait a moment and reload. Don't
+  open it on the teacher's own laptop in the first seconds: macOS may cache
+  the "not found" answer for a few minutes.
 - Grades are saved to `results.db` on your laptop and stay there after you
   stop. Download them any time from the teacher console's **Download CSV**.
 
