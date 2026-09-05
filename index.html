@@ -178,7 +178,8 @@ function render(data) {
     });
     opts.appendChild(b);
   });
-  $("nextBtn").disabled = true;
+  $("nextBtn").disabled = true;   // enabled once an option is chosen
+  $("skipBtn").disabled = false;  // skipping is always allowed, chosen option or not
   $("quizErr").textContent = "";
   show("quiz");
 }
