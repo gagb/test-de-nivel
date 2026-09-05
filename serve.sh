@@ -42,6 +42,16 @@ if ! command -v cloudflared >/dev/null 2>&1; then
   exit 1
 fi
 
+# Refuse to start if something else already holds the port. Otherwise the
+# tunnel would silently point at that other process (e.g. a stale server with
+# a different password) instead of the app we are about to start.
+if lsof -nP -iTCP:"${PORT}" -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "ERROR: port ${PORT} is already in use by:"
+  lsof -nP -iTCP:"${PORT}" -sTCP:LISTEN
+  echo "Stop that process (kill <PID>) or run with a different port: PORT=5001 ./serve.sh"
+  exit 1
+fi
+
 # --- build the student page ----------------------------------------------
 python3 build.py
 
@@ -51,8 +61,21 @@ python3 app.py &
 APP_PID=$!
 trap 'echo; echo "Stopping..."; kill "$APP_PID" 2>/dev/null || true' EXIT INT TERM
 
-# give the server a moment to bind
-sleep 2
+# Wait until OUR app is actually listening; abort if it died (e.g. bind error).
+for _ in $(seq 1 20); do
+  if ! kill -0 "$APP_PID" 2>/dev/null; then
+    echo "ERROR: the app exited before it started listening. See the messages above."
+    exit 1
+  fi
+  if curl -s -o /dev/null "http://127.0.0.1:${PORT}/"; then
+    break
+  fi
+  sleep 0.5
+done
+if ! curl -s -o /dev/null "http://127.0.0.1:${PORT}/"; then
+  echo "ERROR: the app did not start listening on port ${PORT}."
+  exit 1
+fi
 
 echo
 echo "Opening public tunnel. Share the https://…trycloudflare.com URL below."
