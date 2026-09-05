@@ -255,4 +255,9 @@ def export_csv():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    # Debugger is OFF by default: this server gets exposed through a public
+    # tunnel, and Flask's debugger would let anyone run code on an error page.
+    # Enable it only for local development with FLASK_DEBUG=1.
+    debug = os.environ.get("FLASK_DEBUG") == "1"
+    port = int(os.environ.get("PORT", "5000"))
+    app.run(host="127.0.0.1", port=port, debug=debug)

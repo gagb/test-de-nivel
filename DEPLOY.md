@@ -1,3 +1,63 @@
+# Deploying the placement test
+
+Two supported ways to run it:
+
+- **[Serve over a Cloudflare tunnel](#serve-over-a-cloudflare-tunnel)** —
+  simplest and free; the app runs on the teacher's laptop for a class session.
+- **[Deploy to PythonAnywhere](#deploying-to-pythonanywhere-free-tier)** —
+  always-on hosting with a persistent database.
+
+---
+
+# Serve over a Cloudflare tunnel
+
+Best for running the test during a class. The app runs on your laptop and
+Cloudflare gives it a temporary public URL. Data stays in `results.db` on your
+machine. The laptop must stay awake, online, and running the app for the whole
+test.
+
+## One-time setup
+
+Install `cloudflared` (this is an Intel Mac). In Terminal:
+
+```bash
+curl -L -o /tmp/cloudflared.tgz \
+  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64.tgz
+tar -xzf /tmp/cloudflared.tgz -C /tmp
+sudo mv /tmp/cloudflared /usr/local/bin/cloudflared
+chmod +x /usr/local/bin/cloudflared
+cloudflared --version        # confirm it works
+```
+
+Install the Python dependency once:
+
+```bash
+pip3 install --user -r requirements.txt
+```
+
+## Each time you run the test
+
+From the project folder:
+
+```bash
+TEACHER_PASSWORD=yourpassword ./serve.sh
+```
+
+The script builds the page, starts the server, and prints a public URL like
+`https://something-random.trycloudflare.com`. Share that URL with students.
+The teacher console is that URL with `/teacher` added; log in with any username
+and the password you set. Press **Ctrl-C** to stop the server and close the
+tunnel.
+
+Notes:
+- The `trycloudflare.com` URL is new every run and stops working once you press
+  Ctrl-C. Start the script before class and keep it running until everyone is
+  done.
+- Grades are saved to `results.db` on your laptop and stay there after you
+  stop. Download them any time from the teacher console's **Download CSV**.
+
+---
+
 # Deploying to PythonAnywhere (free tier)
 
 This hosts the placement test at a public URL like

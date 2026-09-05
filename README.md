@@ -30,9 +30,18 @@ TEACHER_PASSWORD=yourpassword python app.py
 - Teacher console: <http://127.0.0.1:5000/teacher> (any username, password =
   `TEACHER_PASSWORD`; defaults to `changeme` if unset).
 
-To run the test for a class, host `app.py` somewhere the students can reach
-(a small cloud host, or the teacher's laptop on the same network) and share
-the URL.
+## Run the test for a class
+
+Simplest option, free, from the teacher's laptop over a public Cloudflare
+tunnel:
+
+```bash
+TEACHER_PASSWORD=yourpassword ./serve.sh
+```
+
+It prints a `https://…trycloudflare.com` URL to share with students; add
+`/teacher` for the console. See `DEPLOY.md` for the one-time `cloudflared`
+install and for always-on hosting on PythonAnywhere.
 
 ## Test structure and scoring
 
